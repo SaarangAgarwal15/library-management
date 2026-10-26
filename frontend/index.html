@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Marginalia · Library</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Young+Serif&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#eef0ec;--ink:#1b2a33;--mute:#667780;--line:#d5dad4;--card:#fbfbf8;--accent:#2f4b5c;--warn:#a8402f;--wood:#b9966b}
+@media(prefers-color-scheme:dark){:root{--bg:#141b1f;--ink:#e6ebe7;--mute:#8d9ca4;--line:#2a363c;--card:#1b252a;--accent:#8fb4c8;--warn:#e08a78;--wood:#7a6247}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 "Instrument Sans",system-ui,sans-serif}
+h1,h2{font-family:"Young Serif",Georgia,serif;font-weight:400;margin:0}
+header{display:flex;flex-wrap:wrap;gap:16px;align-items:end;justify-content:space-between;padding:32px 40px 8px}
+h1{font-size:34px}.sub{color:var(--mute);margin:2px 0 0}
+nav{display:flex;gap:4px;padding:0 40px;border-bottom:1px solid var(--line);margin-top:16px}
+nav button{background:none;border:0;padding:10px 14px;font:inherit;color:var(--mute);cursor:pointer;border-bottom:2px solid transparent}
+nav button[aria-selected=true]{color:var(--ink);border-color:var(--accent);font-weight:600}
+main{padding:24px 40px 64px;max-width:1200px}
+.stats{display:flex;flex-wrap:wrap;gap:28px;margin-bottom:24px}.stats b{font:400 26px "Young Serif",serif;display:block}.stats span{color:var(--mute);font-size:13px}
+.stats .bad b{color:var(--warn)}
+.bar{display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap}
+input,select{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:9px 12px}
+input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.bar input{flex:1;min-width:200px}
+.btn{font:inherit;font-weight:600;background:var(--accent);color:var(--bg);border:0;border-radius:8px;padding:9px 16px;cursor:pointer}
+.btn.ghost{background:none;color:var(--ink);border:1px solid var(--line)}
+.shelf{display:flex;flex-wrap:wrap;align-items:flex-end;gap:4px;padding:0 14px;border-bottom:14px solid var(--wood);min-height:260px;border-radius:2px}
+.spine{writing-mode:vertical-rl;border:0;cursor:pointer;color:#fff;font:400 15px "Young Serif",serif;padding:14px 0;display:flex;align-items:center;justify-content:space-between;gap:12px;border-radius:3px 3px 0 0;transition:transform .15s}
+.spine:hover{transform:translateY(-10px)}.spine small{font:500 11px "Instrument Sans";opacity:.8}
+.spine.out{opacity:.4}
+table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--line)}th{color:var(--mute);font-weight:500;font-size:13px}
+tr:last-child td{border:0}.late{color:var(--warn);font-weight:600}.empty{color:var(--mute);padding:40px 0}
+dialog{border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink);padding:24px;width:min(420px,92vw)}
+dialog::backdrop{background:#0008}dialog form{display:grid;gap:12px}dialog label{display:grid;gap:4px;font-size:13px;color:var(--mute)}
+.row{display:flex;gap:8px;justify-content:flex-end;margin-top:6px}
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 18px;border-radius:8px;opacity:0;pointer-events:none;transition:opacity .2s}
+#toast.on{opacity:1}
+@media(max-width:600px){header,nav,main{padding-left:18px;padding-right:18px}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style></head><body>
+<header><div><h1>Marginalia</h1><p class="sub">Your library, on the shelf and out in the world.</p></div>
+<div class="stats" id="stats" aria-live="polite"></div></header>
+<nav role="tablist"><button role="tab" data-v="shelf">Shelf</button><button role="tab" data-v="loans">Loans</button><button role="tab" data-v="members">Members</button></nav>
+<main id="view"></main>
+<dialog id="dlg"></dialog><div id="toast" role="status"></div>
+<script>
+const $=s=>document.querySelector(s), esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const api=(p,o={})=>fetch('/api'+p,{method:o.method||'GET',headers:{'Content-Type':'application/json'},body:o.body&&JSON.stringify(o.body)}).then(async r=>{if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(typeof e.detail==='string'?e.detail:'Check the fields and try again')}return r.status===204?null:r.json()});
+const toast=m=>{const t=$('#toast');t.textContent=m;t.classList.add('on');setTimeout(()=>t.classList.remove('on'),2600)};
+const act=async(fn,ok)=>{try{await fn();ok&&toast(ok);$('#dlg').close();render()}catch(e){toast(e.message)}};
+const hue=s=>[...s].reduce((a,c)=>a*31+c.charCodeAt(0)>>>0,7);
+const COL=['#2f4b5c','#8c3b3b','#b08a2a','#4f6f52','#6b4e71','#3d5a80','#7a5230'];
+const fmt=d=>new Date(d+'Z').toLocaleDateString(undefined,{day:'numeric',month:'short'});
+let view='shelf',q='';
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{view=b.dataset.v;render()});
+
+async function render(){
+  document.querySelectorAll('nav button').forEach(b=>b.setAttribute('aria-selected',b.dataset.v===view));
+  const s=await api('/stats');
+  $('#stats').innerHTML=`<div><b>${s.titles}</b><span>titles</span></div><div><b>${s.on_loan}</b><span>on loan</span></div><div class="${s.overdue?'bad':''}"><b>${s.overdue}</b><span>overdue</span></div><div><b>${s.members}</b><span>members</span></div>`;
+  await views[view]();
+}
+const views={
+async shelf(){
+  const books=await api('/books?q='+encodeURIComponent(q));
+  $('#view').innerHTML=`<div class="bar"><input id="q" type="search" placeholder="Search by title or author" value="${esc(q)}" aria-label="Search books"><button class="btn" id="add">Add book</button></div>
+  <div class="shelf">${books.map(b=>{const h=hue(b.title);return `<button class="spine ${b.available?'':'out'}" data-id="${b.id}" title="${esc(b.title)} — ${esc(b.author)}" style="background:${COL[h%7]};height:${190+h%70}px;width:${44+Math.min(b.copies,5)*5}px"><span>${esc(b.title)}</span><small>${b.available}/${b.copies}</small></button>`}).join('')||''}</div>
+  ${books.length?'':'<p class="empty">No books match. Try another search or add a book.</p>'}`;
+  const qi=$('#q');qi.oninput=()=>{q=qi.value;clearTimeout(qi.t);qi.t=setTimeout(async()=>{await views.shelf();$('#q').focus();$('#q').setSelectionRange(q.length,q.length)},250)};
+  $('#add').onclick=addBook;
+  document.querySelectorAll('.spine').forEach(el=>el.onclick=()=>detail(books.find(b=>b.id==el.dataset.id)));
+},
+async loans(){
+  const l=await api('/loans');
+  $('#view').innerHTML=l.length?`<table><tr><th>Book</th><th>Member</th><th>Borrowed</th><th>Due</th><th></th></tr>${l.map(x=>`<tr><td>${esc(x.book)}</td><td>${esc(x.member)}</td><td>${fmt(x.borrowed_at)}</td><td class="${x.overdue?'late':''}">${x.returned_at?'Returned '+fmt(x.returned_at):(x.overdue?'Overdue · ':'')+fmt(x.due_at)}</td><td>${x.returned_at?'':`<button class="btn ghost" data-r="${x.id}">Return</button>`}</td></tr>`).join('')}</table>`:'<p class="empty">No loans yet. Open a book on the shelf to check it out.</p>';
+  document.querySelectorAll('[data-r]').forEach(b=>b.onclick=()=>act(()=>api(`/loans/${b.dataset.r}/return`,{method:'POST'}),'Book returned'));
+},
+async members(){
+  const m=await api('/members');
+  $('#view').innerHTML=`<div class="bar"><button class="btn" id="addm">Add member</button></div><table><tr><th>Name</th><th>Email</th></tr>${m.map(x=>`<tr><td>${esc(x.name)}</td><td>${esc(x.email)}</td></tr>`).join('')}</table>`;
+  $('#addm').onclick=()=>form('New member',`<label>Name<input name="name" required></label><label>Email<input name="email" type="email" required></label>`,d=>act(()=>api('/members',{method:'POST',body:d}),'Member added'),'Add member');
+}};
+function form(title,fields,submit,label,extra=''){
+  const d=$('#dlg');d.innerHTML=`<h2>${title}</h2>${extra}<form method="dialog">${fields}<div class="row"><button type="button" class="btn ghost" id="x">Cancel</button><button class="btn">${label}</button></div></form>`;
+  $('#x').onclick=()=>d.close();
+  d.querySelector('form').onsubmit=e=>{e.preventDefault();submit(Object.fromEntries(new FormData(e.target)))};
+  d.showModal();
+}
+function addBook(){form('New book',`<label>Title<input name="title" required></label><label>Author<input name="author" required></label><label>ISBN<input name="isbn" required minlength="3"></label><label>Copies<input name="copies" type="number" min="1" value="1"></label>`,d=>{d.copies=+d.copies;act(()=>api('/books',{method:'POST',body:d}),'Book added')},'Add book')}
+async function detail(b){
+  const m=await api('/members');
+  const extra=`<p class="sub">${esc(b.author)} · ISBN ${esc(b.isbn)}<br>${b.available} of ${b.copies} copies on the shelf</p>`;
+  form(esc(b.title),b.available?`<label>Check out to<select name="member_id">${m.map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join('')}</select></label>`:'<p class="late">All copies are out.</p>',
+    d=>act(()=>api('/loans',{method:'POST',body:{book_id:b.id,member_id:+d.member_id}}),'Checked out for 14 days'),'Check out',extra);
+  const del=document.createElement('button');del.type='button';del.className='btn ghost';del.textContent='Remove book';
+  del.onclick=()=>act(()=>api('/books/'+b.id,{method:'DELETE'}),'Book removed');$('#dlg .row').prepend(del);
+}
+render();
+</script></body></html>
