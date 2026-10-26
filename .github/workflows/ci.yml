@@ -42,12 +42,8 @@ jobs:
           context: ./${{ matrix.service }}
           load: true
           tags: ${{ env.REGISTRY }}/library-${{ matrix.service }}:${{ github.sha }}
-      - uses: aquasecurity/trivy-action@0.24.0
-        with:
-          image-ref: ${{ env.REGISTRY }}/library-${{ matrix.service }}:${{ github.sha }}
-          severity: CRITICAL
-          exit-code: "1"
-          ignore-unfixed: true
+      - name: Scan image for critical vulnerabilities
+        run: docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest image --severity CRITICAL --exit-code 1 --ignore-unfixed ${{ env.REGISTRY }}/library-${{ matrix.service }}:${{ github.sha }}
       - run: |
           IMG=${{ env.REGISTRY }}/library-${{ matrix.service }}
           docker tag $IMG:${{ github.sha }} $IMG:latest
